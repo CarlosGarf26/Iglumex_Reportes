@@ -4,7 +4,7 @@ import { ProcessedReport, ReportData } from '../types';
 
 interface MobileReportCardProps {
   report: ProcessedReport;
-  onUpdateReport: (id: string, field: keyof ReportData, value: string) => void;
+  onUpdateReport: (id: string, field: keyof ReportData, value: any) => void;
   onDeleteReport: (id: string) => void;
   onViewImage: (report: ProcessedReport) => void;
 }
@@ -17,14 +17,16 @@ export const MobileReportCard: React.FC<MobileReportCardProps> = ({ report, onUp
       <div className="flex justify-between items-start mb-3">
         <div className="flex items-center gap-2">
           <div 
-            className={`w-2 h-2 rounded-full ${report.confidenceScore >= 8 ? 'bg-green-500' : 'bg-red-500'}`} 
+            className={`w-2 h-2 rounded-full ${report.confidenceScore >= 8 ? 'bg-green-500' : 'bg-yellow-500'}`} 
           />
-          <h3 className="font-semibold text-slate-800">{report.data.inmueble || 'Sin Nombre'}</h3>
+          <h3 className="font-semibold text-slate-800 truncate max-w-[150px]">
+            {report.data.cliente || report.data.sito || 'Sin Nombre'}
+          </h3>
         </div>
         <div className="flex gap-2">
           <button 
             onClick={() => onViewImage(report)}
-            className="text-comexa-accent hover:text-blue-700 bg-blue-50 p-1 rounded"
+            className="text-blue-600 hover:text-blue-700 bg-blue-50 p-1 rounded"
             title="Ver Original"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
@@ -46,7 +48,7 @@ export const MobileReportCard: React.FC<MobileReportCardProps> = ({ report, onUp
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-2">
            <div>
-             <label className="text-xs text-slate-500 block">Fecha</label>
+             <label className="text-[10px] font-bold text-blue-600 block uppercase">Fecha</label>
              <input 
                 type="text" 
                 value={report.data.fecha || ''}
@@ -55,18 +57,18 @@ export const MobileReportCard: React.FC<MobileReportCardProps> = ({ report, onUp
              />
            </div>
            <div>
-             <label className="text-xs text-slate-500 block">Folio</label>
+             <label className="text-[10px] font-bold text-red-600 block uppercase">Folio</label>
              <input 
                 type="text" 
                 value={report.data.folio || ''}
                 onChange={(e) => onUpdateReport(report.id, 'folio', e.target.value)}
-                className="w-full text-sm border-b border-slate-200 focus:border-blue-500 outline-none py-1"
+                className="w-full text-sm border-b border-slate-200 focus:border-blue-500 outline-none py-1 font-bold text-red-600"
              />
            </div>
         </div>
 
         <div>
-           <label className="text-xs text-slate-500 block">Trabajo Realizado</label>
+           <label className="text-[10px] font-bold text-blue-600 block uppercase">Trabajo Realizado</label>
            <textarea 
               value={report.data.trabajoRealizado || ''}
               onChange={(e) => onUpdateReport(report.id, 'trabajoRealizado', e.target.value)}
@@ -78,61 +80,47 @@ export const MobileReportCard: React.FC<MobileReportCardProps> = ({ report, onUp
         {expanded && (
           <div className="space-y-3 pt-2 border-t border-slate-100 animate-fadeIn">
              <div>
-                <label className="text-xs text-slate-500 block">Falla Reportada</label>
+                <label className="text-[10px] font-bold text-blue-600 block uppercase">Falla</label>
                 <textarea 
-                  value={report.data.fallaReportada || ''}
-                  onChange={(e) => onUpdateReport(report.id, 'fallaReportada', e.target.value)}
+                  value={report.data.falla || ''}
+                  onChange={(e) => onUpdateReport(report.id, 'falla', e.target.value)}
                   className="w-full text-sm border border-slate-200 rounded p-2 mt-1 focus:border-blue-500 outline-none"
                   rows={2}
                 />
              </div>
              <div>
-                <label className="text-xs text-slate-500 block">Condiciones Encontradas</label>
+                <label className="text-[10px] font-bold text-blue-600 block uppercase">Condiciones</label>
                 <textarea 
-                  value={report.data.condicionesEncontradas || ''}
-                  onChange={(e) => onUpdateReport(report.id, 'condicionesEncontradas', e.target.value)}
+                  value={report.data.condiciones || ''}
+                  onChange={(e) => onUpdateReport(report.id, 'condiciones', e.target.value)}
                   className="w-full text-sm border border-slate-200 rounded p-2 mt-1 focus:border-blue-500 outline-none"
                   rows={2}
                 />
              </div>
              <div>
-                <label className="text-xs text-slate-500 block">Materiales</label>
+                <label className="text-[10px] font-bold text-blue-600 block uppercase">Materiales ({report.data.materiales?.length || 0})</label>
+                <div className="text-[10px] text-slate-500 italic">
+                  {report.data.materiales?.map((m, i) => (
+                    <div key={i} className="border-b border-slate-50 py-1">
+                      {m.no} {m.unidad} - {m.nombre} ({m.modelo})
+                    </div>
+                  ))}
+                  {(!report.data.materiales || report.data.materiales.length === 0) && "Sin materiales registrados"}
+                </div>
+             </div>
+             
+             <div>
+                <label className="text-[10px] font-bold text-blue-600 block uppercase">Sito / Ubicación</label>
                 <input 
                   type="text" 
-                  value={report.data.materiales || ''}
-                  onChange={(e) => onUpdateReport(report.id, 'materiales', e.target.value)}
+                  value={report.data.sito || ''}
+                  onChange={(e) => onUpdateReport(report.id, 'sito', e.target.value)}
                   className="w-full text-sm border-b border-slate-200 focus:border-blue-500 outline-none py-1"
                 />
              </div>
+
              <div>
-                <label className="text-xs text-slate-500 block">Equipo Instalado</label>
-                <input 
-                  type="text" 
-                  value={report.data.equipoInstalado || ''}
-                  onChange={(e) => onUpdateReport(report.id, 'equipoInstalado', e.target.value)}
-                  className="w-full text-sm border-b border-slate-200 focus:border-blue-500 outline-none py-1"
-                />
-             </div>
-             <div>
-                <label className="text-xs text-slate-500 block">Equipo Retirado</label>
-                <input 
-                  type="text" 
-                  value={report.data.equipoRetirado || ''}
-                  onChange={(e) => onUpdateReport(report.id, 'equipoRetirado', e.target.value)}
-                  className="w-full text-sm border-b border-slate-200 focus:border-blue-500 outline-none py-1"
-                />
-             </div>
-             <div>
-                <label className="text-xs text-slate-500 block">Observaciones</label>
-                <textarea 
-                  value={report.data.observaciones || ''}
-                  onChange={(e) => onUpdateReport(report.id, 'observaciones', e.target.value)}
-                  className="w-full text-sm border border-slate-200 rounded p-2 mt-1 focus:border-blue-500 outline-none"
-                  rows={2}
-                />
-             </div>
-             <div>
-                <label className="text-xs text-slate-500 block">Técnicos</label>
+                <label className="text-[10px] font-bold text-blue-600 block uppercase">Técnicos</label>
                 <input 
                   type="text" 
                   value={report.data.tecnicos || ''}
@@ -140,22 +128,23 @@ export const MobileReportCard: React.FC<MobileReportCardProps> = ({ report, onUp
                   className="w-full text-sm border-b border-slate-200 focus:border-blue-500 outline-none py-1"
                 />
              </div>
+             
              <div className="grid grid-cols-2 gap-2">
                 <div>
-                   <label className="text-xs text-slate-500 block">Hr Entrada</label>
+                   <label className="text-[10px] font-bold text-blue-600 block uppercase">Hr Inicio</label>
                    <input 
                       type="text" 
-                      value={report.data.horaEntrada || ''}
-                      onChange={(e) => onUpdateReport(report.id, 'horaEntrada', e.target.value)}
+                      value={report.data.horarioInicio || ''}
+                      onChange={(e) => onUpdateReport(report.id, 'horarioInicio', e.target.value)}
                       className="w-full text-sm border-b border-slate-200 focus:border-blue-500 outline-none py-1"
                    />
                 </div>
                 <div>
-                   <label className="text-xs text-slate-500 block">Hr Salida</label>
+                   <label className="text-[10px] font-bold text-blue-600 block uppercase">Hr Fin</label>
                    <input 
                       type="text" 
-                      value={report.data.horaSalida || ''}
-                      onChange={(e) => onUpdateReport(report.id, 'horaSalida', e.target.value)}
+                      value={report.data.horarioFin || ''}
+                      onChange={(e) => onUpdateReport(report.id, 'horarioFin', e.target.value)}
                       className="w-full text-sm border-b border-slate-200 focus:border-blue-500 outline-none py-1"
                    />
                 </div>
@@ -165,7 +154,7 @@ export const MobileReportCard: React.FC<MobileReportCardProps> = ({ report, onUp
 
         <button 
           onClick={() => setExpanded(!expanded)}
-          className="w-full text-center text-xs text-comexa-accent font-medium py-1 hover:bg-slate-50 rounded"
+          className="w-full text-center text-xs text-blue-600 font-bold py-2 hover:bg-slate-50 rounded border border-blue-100"
         >
           {expanded ? 'Ver menos' : 'Ver más detalles'}
         </button>
