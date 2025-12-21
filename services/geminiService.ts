@@ -1,44 +1,38 @@
 
-import { GoogleGenAI, Type, HarmCategory, HarmBlockThreshold } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { ReportData } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 const SYSTEM_INSTRUCTION = `
-Eres un experto en digitalización de reportes de mantenimiento de la empresa IGLÚMEX.
-Tu tarea es realizar una transcripción COMPLETA, LITERAL y FIDEDIGNA del formulario de mantenimiento de aires acondicionados.
+Eres un experto en digitalización de reportes técnicos manuscritos de la empresa IGLÚMEX.
+Tu objetivo es realizar una transcripción 100% fiel del formulario de mantenimiento.
 
-INSTRUCCIONES ESPECÍFICAS:
-1. **Folio (N°)**: Extrae el número rojo en la esquina superior derecha (ej. IG-0000001) en 'folio'.
-2. **Encabezado**: Extrae SITO, CLIENTE, N° ID, REGIÓN, TICKET y FECHA.
-3. **Secciones de Texto**: Transcribe íntegramente PERSONAL TÉCNICO, FALLA, CONDICIONES ENCONTRADAS, TRABAJO REALIZADO y OBSERVACIONES ADICIONALES.
-4. **Horario**: Extrae Horario Inicio y Fin.
-5. **Checkboxes**: Identifica las marcas (X o check) en:
-   - SERVICIO (Preventivo, Correctivo, Instalación, etc.)
-   - CLASIFICACIÓN DE LA FALLA (Electrónica, Eléctrica, Mecánica, etc.)
-   - ESTADO FINAL (Reparación Total, Parcial, Pendiente)
-6. **Materiales**: Extrae la tabla de materiales (N°, Unidad, Nombre, Modelo) como una lista de objetos.
+REGLAS DE EXTRACCIÓN:
+1. **Letra Manuscrita**: Haz tu mejor esfuerzo por descifrar la letra cursiva o poco legible en las secciones de 'TRABAJO REALIZADO', 'FALLA' y 'OBSERVACIONES'.
+2. **Folio**: El folio suele estar en color rojo intenso en la esquina superior derecha (Ej: IG-123456).
+3. **Casillas de Verificación (Checkboxes)**: Analiza visualmente las marcas (X, V, o tachaduras) en las secciones de 'SERVICIO', 'CLASIFICACIÓN' y 'ESTADO FINAL'. Selecciona el texto de la opción marcada.
+4. **Tabla de Materiales**: Extrae cada fila de la tabla. Si no hay materiales, devuelve una lista vacía.
+5. **Formato de Salida**: Debes responder EXCLUSIVAMENTE con un objeto JSON válido que siga el esquema proporcionado.
 
-Si un campo está vacío o es ilegible, déjalo como cadena vacía o lista vacía.
+No inventes datos. Si un campo es totalmente ilegible, coloca "Ilegible".
 `;
 
 const reportSchema = {
   type: Type.OBJECT,
   properties: {
-    folio: { type: Type.STRING, description: "Número de folio IG-XXXXXXX" },
-    fecha: { type: Type.STRING, description: "Fecha del reporte" },
-    sito: { type: Type.STRING, description: "Ubicación o Sito" },
-    cliente: { type: Type.STRING, description: "Nombre del cliente" },
-    idNum: { type: Type.STRING, description: "Número de ID" },
-    region: { type: Type.STRING, description: "Región" },
-    ticket: { type: Type.STRING, description: "Número de Ticket" },
-    tecnicos: { type: Type.STRING, description: "Personal técnico" },
-    horarioInicio: { type: Type.STRING, description: "Hora de inicio" },
-    horarioFin: { type: Type.STRING, description: "Hora de fin" },
-    servicio: { type: Type.STRING, description: "Opciones marcadas en SERVICIO" },
-    falla: { type: Type.STRING, description: "Descripción de la falla" },
-    condiciones: { type: Type.STRING, description: "Condiciones encontradas" },
-    trabajoRealizado: { type: Type.STRING, description: "Detalle del trabajo realizado" },
+    folio: { type: Type.STRING },
+    fecha: { type: Type.STRING },
+    sito: { type: Type.STRING },
+    cliente: { type: Type.STRING },
+    idNum: { type: Type.STRING },
+    region: { type: Type.STRING },
+    ticket: { type: Type.STRING },
+    tecnicos: { type: Type.STRING },
+    horarioInicio: { type: Type.STRING },
+    horarioFin: { type: Type.STRING },
+    servicio: { type: Type.STRING },
+    falla: { type: Type.STRING },
+    condiciones: { type: Type.STRING },
+    trabajoRealizado: { type: Type.STRING },
     materiales: {
       type: Type.ARRAY,
       items: {
@@ -51,51 +45,61 @@ const reportSchema = {
         }
       }
     },
-    clasificacionFalla: { type: Type.STRING, description: "Opciones marcadas en CLASIFICACIÓN DE LA FALLA" },
-    estadoFinal: { type: Type.STRING, description: "Opciones marcadas en ESTADO FINAL" },
-    observaciones: { type: Type.STRING, description: "Observaciones adicionales" },
-    confidenceScore: { type: Type.NUMBER, description: "Puntaje de legibilidad 1-10" }
+    clasificacionFalla: { type: Type.STRING },
+    estadoFinal: { type: Type.STRING },
+    observaciones: { type: Type.STRING },
+    confidenceScore: { type: Type.NUMBER, description: "Calidad de la imagen del 1 al 10" }
   },
-  required: ["folio", "sito", "trabajoRealizado", "confidenceScore"]
-};
-
-const extractJSON = (text: string): string => {
-  let clean = text.replace(/```json/g, '').replace(/```/g, '').trim();
-  const firstBrace = clean.indexOf('{');
-  const lastBrace = clean.lastIndexOf('}');
-  if (firstBrace >= 0 && lastBrace > firstBrace) {
-    return clean.substring(firstBrace, lastBrace + 1);
-  }
-  return clean;
+  required: ["folio", "cliente", "trabajoRealizado", "confidenceScore"]
 };
 
 export async function processReportImage(base64Data: string, mimeType: string, requestedModel: string = 'gemini-3-flash-preview'): Promise<{ data: ReportData, score: number }> {
+  // Inicialización dentro de la función para asegurar el uso de la API Key actual
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
   const cleanBase64 = base64Data.split(',')[1] || base64Data;
   
-  const response = await ai.models.generateContent({
-    model: requestedModel,
-    contents: {
-      parts: [
-        { inlineData: { mimeType: mimeType, data: cleanBase64 } },
-        { text: "Extrae los datos de este reporte de mantenimiento de IGLÚMEX en formato JSON." }
-      ]
-    },
-    config: {
-      systemInstruction: SYSTEM_INSTRUCTION,
-      responseMimeType: "application/json",
-      responseSchema: reportSchema,
-      temperature: 0.1,
-    }
-  });
-
-  const resultText = response.text;
-  if (!resultText) throw new Error("No se obtuvo respuesta del modelo.");
-
-  const jsonStr = extractJSON(resultText);
-  const parsed = JSON.parse(jsonStr);
-
-  return {
-    data: parsed as ReportData,
-    score: parsed.confidenceScore || 5
+  // Configuración de presupuesto de pensamiento si es el modelo Pro
+  const config: any = {
+    systemInstruction: SYSTEM_INSTRUCTION,
+    responseMimeType: "application/json",
+    responseSchema: reportSchema,
+    temperature: 0.1,
   };
+
+  if (requestedModel.includes('pro')) {
+    config.thinkingConfig = { thinkingBudget: 2048 };
+  }
+
+  try {
+    const response = await ai.models.generateContent({
+      model: requestedModel,
+      contents: {
+        parts: [
+          { inlineData: { mimeType: mimeType, data: cleanBase64 } },
+          { text: "Digitaliza este reporte de mantenimiento de IGLÚMEX. Pon especial atención a la letra manuscrita y los campos marcados." }
+        ]
+      },
+      config: config
+    });
+
+    const resultText = response.text;
+    if (!resultText) throw new Error("El modelo no devolvió texto.");
+
+    // Intentar limpiar posibles bloques de código si el modelo los incluyó a pesar del mimeType
+    let cleanJson = resultText.trim();
+    if (cleanJson.startsWith('```')) {
+      cleanJson = cleanJson.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+    }
+
+    const parsed = JSON.parse(cleanJson);
+
+    return {
+      data: parsed as ReportData,
+      score: parsed.confidenceScore || 5
+    };
+  } catch (err) {
+    console.error("Error en processReportImage:", err);
+    throw new Error("No se pudo procesar la imagen. Verifica la calidad o la conexión.");
+  }
 }
