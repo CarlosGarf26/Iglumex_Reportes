@@ -3,17 +3,15 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { ReportData } from "../types";
 
 const SYSTEM_INSTRUCTION = `
-Eres un experto en digitalización de reportes técnicos manuscritos de la empresa IGLÚMEX.
-Tu objetivo es realizar una transcripción 100% fiel del formulario de mantenimiento.
+Eres un sistema experto en OCR y procesamiento de lenguaje natural especializado en formularios técnicos de IGLÚMEX.
+Tu tarea es convertir la imagen o PDF de un reporte de mantenimiento en un objeto JSON estructurado.
 
-REGLAS DE EXTRACCIÓN:
-1. **Letra Manuscrita**: Haz tu mejor esfuerzo por descifrar la letra cursiva o poco legible en las secciones de 'TRABAJO REALIZADO', 'FALLA' y 'OBSERVACIONES'.
-2. **Folio**: El folio suele estar en color rojo intenso en la esquina superior derecha (Ej: IG-123456).
-3. **Casillas de Verificación (Checkboxes)**: Analiza visualmente las marcas (X, V, o tachaduras) en las secciones de 'SERVICIO', 'CLASIFICACIÓN' y 'ESTADO FINAL'. Selecciona el texto de la opción marcada.
-4. **Tabla de Materiales**: Extrae cada fila de la tabla. Si no hay materiales, devuelve una lista vacía.
-5. **Formato de Salida**: Debes responder EXCLUSIVAMENTE con un objeto JSON válido que siga el esquema proporcionado.
-
-No inventes datos. Si un campo es totalmente ilegible, coloca "Ilegible".
+REGLAS CRÍTICAS:
+1. **Transcripción Manuscrita**: El reporte está lleno a mano. Debes descifrar la caligrafía. Si una palabra es dudosa, usa el contexto técnico (aire acondicionado, voltajes, presiones, limpieza).
+2. **Campos de Texto**: Transcribe EXACTAMENTE lo que dice el técnico en 'TRABAJO REALIZADO', 'FALLA' y 'OBSERVACIONES'. No resumas.
+3. **Casillas de Verificación**: Identifica qué opción tiene una 'X', una marca de cotejo o un círculo. Devuelve el texto de la opción seleccionada.
+4. **Tabla de Materiales**: Procesa todas las filas escritas. Cada fila debe tener 'no', 'unidad', 'nombre' y 'modelo'.
+5. **Formato**: Responde ÚNICAMENTE con el JSON, sin texto explicativo.
 `;
 
 const reportSchema = {
@@ -48,18 +46,20 @@ const reportSchema = {
     clasificacionFalla: { type: Type.STRING },
     estadoFinal: { type: Type.STRING },
     observaciones: { type: Type.STRING },
-    confidenceScore: { type: Type.NUMBER, description: "Calidad de la imagen del 1 al 10" }
+    confidenceScore: { type: Type.NUMBER }
   },
   required: ["folio", "cliente", "trabajoRealizado", "confidenceScore"]
 };
 
 export async function processReportImage(base64Data: string, mimeType: string, requestedModel: string = 'gemini-3-flash-preview'): Promise<{ data: ReportData, score: number }> {
-  // Inicialización dentro de la función para asegurar el uso de la API Key actual
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) throw new Error("API Key no configurada.");
+
+  const ai = new GoogleGenAI({ apiKey });
   
-  const cleanBase64 = base64Data.split(',')[1] || base64Data;
+  // Limpiar el prefijo data:image/...;base64, si existe
+  const base64Content = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
   
-  // Configuración de presupuesto de pensamiento si es el modelo Pro
   const config: any = {
     systemInstruction: SYSTEM_INSTRUCTION,
     responseMimeType: "application/json",
@@ -76,30 +76,35 @@ export async function processReportImage(base64Data: string, mimeType: string, r
       model: requestedModel,
       contents: {
         parts: [
-          { inlineData: { mimeType: mimeType, data: cleanBase64 } },
-          { text: "Digitaliza este reporte de mantenimiento de IGLÚMEX. Pon especial atención a la letra manuscrita y los campos marcados." }
+          { inlineData: { mimeType: mimeType, data: base64Content } },
+          { text: "Analiza este documento de IGLÚMEX y extrae toda la información escrita a mano y las casillas marcadas." }
         ]
       },
       config: config
     });
 
-    const resultText = response.text;
-    if (!resultText) throw new Error("El modelo no devolvió texto.");
+    const text = response.text;
+    if (!text) throw new Error("El modelo devolvió una respuesta vacía.");
 
-    // Intentar limpiar posibles bloques de código si el modelo los incluyó a pesar del mimeType
-    let cleanJson = resultText.trim();
+    // Limpieza de seguridad por si el modelo ignora el responseMimeType
+    let cleanJson = text.trim();
     if (cleanJson.startsWith('```')) {
       cleanJson = cleanJson.replace(/^```json\n?/, '').replace(/\n?```$/, '');
     }
 
-    const parsed = JSON.parse(cleanJson);
+    const parsedData = JSON.parse(cleanJson);
+    
+    // Asegurar que materiales sea un array
+    if (!Array.isArray(parsedData.materiales)) {
+      parsedData.materiales = [];
+    }
 
     return {
-      data: parsed as ReportData,
-      score: parsed.confidenceScore || 5
+      data: parsedData as ReportData,
+      score: parsedData.confidenceScore || 5
     };
-  } catch (err) {
-    console.error("Error en processReportImage:", err);
-    throw new Error("No se pudo procesar la imagen. Verifica la calidad o la conexión.");
+  } catch (err: any) {
+    console.error("Error en Gemini Service:", err);
+    throw new Error(`Error en transcripción: ${err.message || 'Error desconocido'}`);
   }
 }
